@@ -13,6 +13,7 @@ use crate::infra::sqlite::SqliteForContainerStore;
 use self::enter::EnterHandler;
 use self::init::InitHandler;
 use self::kill::KillHandler;
+use self::list::ListHandler;
 
 use super::repo::{EnvRecord, EnvSpecifier, EnvStore};
 
@@ -116,16 +117,9 @@ pub fn handle(action: Action, current_path: &Path, database_path: &Path) {
             let mut kill_handler = KillHandler::new(docker, sqlite);
             kill_handler.handle(current_path, specifier);
         }
-        _ => {}
+        Action::List => {
+            let mut list_handler = ListHandler::new(docker, sqlite);
+            list_handler.handle();
+        }
     }
-    // let init_handler = InitHandler::new(docker, sqlite);
-
-    // let code = match args.sub_command {
-    //     SubCommand::Init(args) => init::handle(args, shared_dir_path),
-    //     SubCommand::List(args) => list::handle(args),
-    //     SubCommand::Enter(args) => enter::handle(args),
-    //     SubCommand::Kill(args) => kill::handle(args),
-    // };
-
-    // exit(code);
 }
