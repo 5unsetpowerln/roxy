@@ -14,7 +14,7 @@ impl<R: Runtime, S: EnvStore> EnterHandler<R, S> {
         Self { runtime, env_store }
     }
 
-    pub fn handler(&mut self, current_path: &Path, env_specifier: Option<EnvSpecifier>) {
+    pub fn handle(&mut self, current_path: &Path, env_specifier: Option<EnvSpecifier>) {
         // 環境が指定されているか確認する
         if let Some(specifier) = env_specifier {
             // 環境が指定されている場合

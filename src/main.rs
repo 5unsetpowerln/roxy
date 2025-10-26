@@ -19,7 +19,7 @@ fn main() {
     let mut shared_dir_path = env::home_dir().unwrap();
     shared_dir_path.extend([".local", "share"]);
 
-    // 共有ディレクトリが存在していない場合はエラー
+    // 共有ディレクトリが存在しているか確認する
     let shared_dir_presence = match fs_present(&shared_dir_path) {
         Ok(p) => p,
         Err(err) => {
@@ -29,12 +29,22 @@ fn main() {
     };
 
     if !shared_dir_presence {
+        // 存在していない場合はエラーを出して終了する
         error!(
             "Shared directory \"{}\" doesn't exists. You should run init script.",
             shared_dir_path.display()
         );
-        exit(1);
+        return;
     }
 
-    cli::handle(&shared_dir_path);
+    // 現在のディレクトリパスを取得する
+    let current_path = match env::current_dir() {
+        Ok(p) => p,
+        Err(err) => {
+            error!("Failed to get current directory path: {err}");
+            return;
+        }
+    };
+
+    cli::handle(&current_path, &shared_dir_path);
 }

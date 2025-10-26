@@ -9,12 +9,15 @@ use std::process::exit;
 use crate::infra::docker::DockerForContainerRuntime;
 use crate::infra::sqlite::SqliteForContainerStore;
 
+use self::enter::EnterHandler;
 use self::init::InitHandler;
+
+use super::repo::EnvSpecifier;
 
 pub enum Action {
     Init,
     List,
-    Enter,
+    Enter(Option<EnvSpecifier>),
     Kill,
 }
 
@@ -26,6 +29,10 @@ pub fn handle(action: Action, current_path: &Path, database_path: &Path) {
         Action::Init => {
             let mut init_handler = InitHandler::new(docker, sqlite);
             init_handler.handle(current_path);
+        }
+        Action::Enter(specifier) => {
+            let mut enter_handler = EnterHandler::new(docker, sqlite);
+            enter_handler.handle(current_path, specifier);
         }
         _ => {}
     }
