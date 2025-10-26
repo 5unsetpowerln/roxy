@@ -19,7 +19,7 @@ impl<R: Runtime, S: EnvStore> InitHandler<R, S> {
 
     pub fn handle(&mut self, project_path: &Path) {
         // 指定されたディレクトリに紐づいた環境が存在するか確認する
-        let env_record = match self.env_store.find_by_path(path) {
+        let env_record = match self.env_store.find_by_path(project_path) {
             Ok(o) => o,
             Err(err) => {
                 error!("Failed to find the environment by path: {err:?}");
