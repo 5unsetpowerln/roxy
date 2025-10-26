@@ -1,7 +1,7 @@
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
-use std::{env, fs, io};
+use std::{env, fs, io, vec};
 
 use anyhow::{Result, anyhow};
 
@@ -36,4 +36,14 @@ pub fn create_dir(path: &Path) -> Result<()> {
 
 pub fn get_entry_name(path: &Path) -> String {
     path.file_name().unwrap().to_string_lossy().to_string()
+}
+
+pub fn option_to_vec<T>(opt: Option<T>) -> Vec<T> {
+    let mut v = Vec::new();
+
+    if let Some(t) = opt {
+        v.push(t);
+    }
+
+    v
 }

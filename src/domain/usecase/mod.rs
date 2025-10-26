@@ -18,14 +18,14 @@ pub enum Action {
     Kill,
 }
 
-pub fn handle(action: Action, shared_dir_path: &Path) {
+pub fn handle(action: Action, current_path: &Path, database_path: &Path) {
     let docker = DockerForContainerRuntime::new();
-    let sqlite = SqliteForContainerStore::new();
+    let sqlite = SqliteForContainerStore::new(database_path);
 
     match action {
         Action::Init => {
             let mut init_handler = InitHandler::new(docker, sqlite);
-            init_handler.handle(shared_dir_path);
+            init_handler.handle(current_path);
         }
         _ => {}
     }

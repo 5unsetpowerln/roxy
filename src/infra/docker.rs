@@ -9,19 +9,19 @@ impl DockerForContainerRuntime {
 }
 
 impl Runtime for DockerForContainerRuntime {
-    fn provision_and_start(&self, env_spec: &EnvSpec) -> ContainerInfo {
+    fn provision_and_start(&mut self, env_spec: &EnvSpec) -> ContainerInfo {
         todo!()
     }
 
-    fn enter(&self) {
+    fn enter(&mut self, info: &ContainerInfo) {
         todo!()
     }
 
-    fn kill(&self) {
+    fn kill(&mut self) {
         todo!()
     }
 
-    fn is_running(&self) {
+    fn is_running(&mut self) {
         todo!()
     }
 }

@@ -1,8 +1,6 @@
 use std::env;
 use std::path::Path;
 
-use clap::Parser;
-use log::error;
 use uuid::Uuid;
 
 use crate::domain::repo::{EnvRecord, EnvSpec, EnvStore, Runtime};
