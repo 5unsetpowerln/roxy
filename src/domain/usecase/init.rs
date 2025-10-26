@@ -1,6 +1,7 @@
 use std::env;
 use std::path::Path;
 
+use log::error;
 use uuid::Uuid;
 
 use crate::domain::repo::{EnvRecord, EnvSpec, EnvStore, Runtime};
@@ -17,6 +18,24 @@ impl<R: Runtime, S: EnvStore> InitHandler<R, S> {
     }
 
     pub fn handle(&mut self, project_path: &Path) {
+        // 指定されたディレクトリに紐づいた環境が存在するか確認する
+        let env_record = match self.env_store.find_by_path(path) {
+            Ok(o) => o,
+            Err(err) => {
+                error!("Failed to find the environment by path: {err:?}");
+                return;
+            }
+        };
+
+        if env_record.is_some() {
+            // 存在する場合はエラーを出して終了する
+            error!(
+                "Environment in {} is already running.",
+                project_path.display()
+            );
+            return;
+        }
+
         // EnvSpecを構築する
         let project_name = get_entry_name(project_path);
 
@@ -28,7 +47,7 @@ impl<R: Runtime, S: EnvStore> InitHandler<R, S> {
             project_name,
         };
 
-        // 仮想環境を立ち上げる
+        // 環境を立ち上げる
         let container_info = self.runtime.provision_and_start(&env_spec);
 
         // EnvRecordを構築する
