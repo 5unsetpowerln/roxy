@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use tabled::Tabled;
 use uuid::Uuid;
 
 use crate::util::option_to_vec;
@@ -32,6 +33,23 @@ pub struct ContainerInfo {
 pub struct EnvRecord {
     pub spec: EnvSpec,
     pub container_info: ContainerInfo,
+}
+
+#[derive(Tabled)]
+pub struct EnvRecordForList {
+    pub uuid: Uuid,
+    pub path: String,
+    pub name: String,
+}
+
+impl EnvRecordForList {
+    pub fn from_record(record: &EnvRecord) -> Self {
+        Self {
+            uuid: record.spec.uuid,
+            name: record.spec.project_name.clone(),
+            path: record.spec.project_path.display().to_string(),
+        }
+    }
 }
 
 pub trait EnvStore {

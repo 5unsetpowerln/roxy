@@ -4,7 +4,6 @@ mod kill;
 mod list;
 
 use std::path::Path;
-use std::process::exit;
 
 use crate::infra::docker::DockerForContainerRuntime;
 use crate::infra::sqlite::SqliteForContainerStore;
