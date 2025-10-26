@@ -17,7 +17,7 @@ impl Runtime for DockerForContainerRuntime {
         todo!()
     }
 
-    fn kill(&mut self) {
+    fn kill(&mut self, info: &ContainerInfo) {
         todo!()
     }
 

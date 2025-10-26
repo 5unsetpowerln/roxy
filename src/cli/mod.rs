@@ -1,8 +1,8 @@
 mod enter;
+mod kill;
 
 use clap::{Parser, Subcommand};
 use std::path::Path;
-use std::process::exit;
 
 use crate::domain::repo::EnvSpecifier;
 use crate::domain::usecase::{self, Action};
@@ -18,7 +18,7 @@ enum SubCommand {
     Init,
     Enter(enter::Args),
     List,
-    Kill,
+    Kill(enter::Args),
 }
 
 fn cli_subcommand_to_usecase_action(sub_command: SubCommand) -> Action {
@@ -36,7 +36,17 @@ fn cli_subcommand_to_usecase_action(sub_command: SubCommand) -> Action {
             }
         }
         SubCommand::List => Action::List,
-        SubCommand::Kill => Action::Kill,
+        SubCommand::Kill(args) => {
+            if let Some(name) = args.name {
+                Action::Kill(Some(EnvSpecifier::Name(name)))
+            } else if let Some(path) = args.path {
+                Action::Kill(Some(EnvSpecifier::Path(path)))
+            } else if let Some(uuid) = args.uuid {
+                Action::Kill(Some(EnvSpecifier::Uuid(uuid)))
+            } else {
+                Action::Kill(None)
+            }
+        }
     }
 }
 

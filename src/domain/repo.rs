@@ -10,6 +10,7 @@ pub enum Error {
     FailedToFind,
 }
 
+#[derive(Clone)]
 pub struct ContainerId {
     id: String,
 }
@@ -20,16 +21,19 @@ pub enum EnvSpecifier {
     Name(String),
 }
 
+#[derive(Clone)]
 pub struct EnvSpec {
     pub uuid: Uuid,
     pub project_path: PathBuf,
     pub project_name: String,
 }
 
+#[derive(Clone)]
 pub struct ContainerInfo {
     container_id: ContainerId,
 }
 
+#[derive(Clone)]
 pub struct EnvRecord {
     pub spec: EnvSpec,
     pub container_info: ContainerInfo,
@@ -90,6 +94,6 @@ pub trait EnvStore {
 pub trait Runtime {
     fn provision_and_start(&mut self, env_spec: &EnvSpec) -> ContainerInfo;
     fn enter(&mut self, info: &ContainerInfo);
-    fn kill(&mut self);
+    fn kill(&mut self, info: &ContainerInfo);
     fn is_running(&mut self);
 }
