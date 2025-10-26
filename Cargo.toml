@@ -1,0 +1,11 @@
+[package]
+name = "pwnenv"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.100"
+clap = { version = "4.5.50", features = ["derive"] }
+log = "0.4.28"
+simple_logger = "5.1.0"
+uuid = { version = "1.18.1", features = ["v4"] }
