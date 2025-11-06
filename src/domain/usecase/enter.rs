@@ -21,7 +21,7 @@ impl<R: Runtime, S: EnvStore> EnterHandler<R, S> {
             specify_env_to_operate(&mut self.env_store, current_path, env_specifier)
         {
             info!("Entering to {}", env_record.spec.project_name);
-            self.runtime.enter(&env_record.container_info);
+            self.runtime.enter(&env_record);
         }
     }
 }

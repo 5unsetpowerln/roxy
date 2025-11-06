@@ -24,7 +24,7 @@ pub enum Action {
     Kill(Option<EnvSpecifier>),
 }
 
-// カレントディレクトリと環境指定子から最終的にどの環境を操作するのかを返す関数
+// カレントディレクトリと環境指定子から最終的にどの環境を選択するのかを返す関数
 fn specify_env_to_operate<E: EnvStore>(
     env_store: &mut E,
     current_path: &Path,
@@ -71,18 +71,19 @@ fn specify_env_to_operate<E: EnvStore>(
     };
 
     if env_records.is_empty() {
-        // 一つも環境がないならその旨を伝えて終了する
-        info!("No available environments.");
+        // 一つも環境がないなら場合
+        // 指定子なしで選択できる環境が存在しない旨を伝える
+        info!("There is no environment that can be selected without a specifier.");
         return None;
     }
 
     if env_records.len() == 1 {
-        // 一つしか環境がないならその環境に入る
+        // 一つしか環境がないならその環境を選択する
         return Some(env_records[0].clone());
     }
 
     // カレントディレクトリに紐づいた環境が存在するか確認する
-    let env_record = match env_store.find_by_path(current_path) {
+    let env_records = match env_store.find_by_path(current_path) {
         Ok(o) => o,
         Err(err) => {
             error!("Failed to find environment: {err:?}");
@@ -90,19 +91,32 @@ fn specify_env_to_operate<E: EnvStore>(
         }
     };
 
-    if let Some(record) = env_record {
-        // 存在する場合はその環境に入る
-        return Some(record);
+    if env_records.is_empty() {
+        // カレントディレクトリに紐づいた環境が存在しない場合
+        // 指定子なしで選択できる環境が存在しない旨を伝える
+        info!("There is no environment that can be selected without a specifier.");
+        return None;
     }
 
-    // 入るべき環境が分からない場合はエラーを出して終了する
-    error!("No environment which should be entered was determined.");
-    None
+    if env_records.len() == 1 {
+        // カレントディレクトリに紐づいた環境が1つしか存在しないならその環境を選択する
+        return Some(env_records[0].clone());
+    }
+
+    // カレントディレクトリに紐づいた環境が複数存在する状態は起きてはならないのでエラー
+    error!("Multiple environments mustn't be linked to the same path.");
+    return None;
 }
 
 pub fn handle(action: Action, current_path: &Path, database_path: &Path) {
     let docker = DockerForContainerRuntime::new();
-    let sqlite = SqliteForContainerStore::new(database_path);
+    let sqlite = match SqliteForContainerStore::new(database_path) {
+        Ok(v) => v,
+        Err(_err) => {
+            error!("Failed to create sqlite service.");
+            return;
+        }
+    };
 
     match action {
         Action::Init => {

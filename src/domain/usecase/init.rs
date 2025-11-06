@@ -1,4 +1,3 @@
-use std::env;
 use std::path::Path;
 
 use log::error;
@@ -27,7 +26,7 @@ impl<R: Runtime, S: EnvStore> InitHandler<R, S> {
             }
         };
 
-        if env_record.is_some() {
+        if !env_record.is_empty() {
             // 存在する場合はエラーを出して終了する
             error!(
                 "Environment in {} is already running.",
@@ -57,6 +56,8 @@ impl<R: Runtime, S: EnvStore> InitHandler<R, S> {
         };
 
         // EnvRecordを保存する
-        self.env_store.insert(&env_record);
+        if self.env_store.insert(&env_record).is_err() {
+            error!("Failed to store environment record.");
+        }
     }
 }

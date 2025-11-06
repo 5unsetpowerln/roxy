@@ -8,11 +8,24 @@ use crate::util::option_to_vec;
 #[derive(Debug)]
 pub enum Error {
     FailedToFind,
+    DatabaseConnectionError,
+    DatabaseError,
+    FailedToRemove,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct ContainerId {
     id: String,
+}
+
+impl ContainerId {
+    pub fn from_str(id: &str) -> Self {
+        Self { id: id.to_string() }
+    }
+
+    pub fn to_string(&self) -> String {
+        self.id.clone()
+    }
 }
 
 pub enum EnvSpecifier {
@@ -21,19 +34,19 @@ pub enum EnvSpecifier {
     Name(String),
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct EnvSpec {
     pub uuid: Uuid,
     pub project_path: PathBuf,
     pub project_name: String,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct ContainerInfo {
-    container_id: ContainerId,
+    pub container_id: ContainerId,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct EnvRecord {
     pub spec: EnvSpec,
     pub container_info: ContainerInfo,
@@ -57,35 +70,56 @@ impl EnvRecordForList {
 }
 
 pub trait EnvStore {
-    fn insert(&mut self, record: &EnvRecord);
+    fn insert(&mut self, record: &EnvRecord) -> Result<(), Error>;
 
     fn list(&mut self) -> Result<Vec<EnvRecord>, Error>;
     // 一つパスには一つの仮想環境しか存在しない
-    fn find_by_path(&mut self, path: &Path) -> Result<Option<EnvRecord>, Error>;
+    fn find_by_path(&mut self, path: &Path) -> Result<Vec<EnvRecord>, Error>;
 
     fn find_by_name(&mut self, name: String) -> Result<Vec<EnvRecord>, Error>;
     // uuidは仮想環境を一意に定めるか、対応する仮想環境が存在しない
-    fn find_by_uuid(&mut self, uuid: Uuid) -> Result<Option<EnvRecord>, Error>;
+    fn find_by_uuid(&mut self, uuid: Uuid) -> Result<Vec<EnvRecord>, Error>;
+
+    // pathと一致する行をすべて削除する
+    fn remove_by_path(&mut self, path: &Path) -> Result<usize, Error>;
+    // nameと一致する行をすべて削除する
+    fn remove_by_name(&mut self, name: String) -> Result<usize, Error>;
+    // uuidと一致する行をすべて削除する
+    fn remove_by_uuid(&mut self, uuid: Uuid) -> Result<usize, Error>;
 
     fn find(&mut self, specifier: EnvSpecifier) -> Result<Vec<EnvRecord>, Error> {
         match specifier {
             EnvSpecifier::Name(name) => match self.find_by_name(name) {
-                Ok(records) => return Ok(records),
-                Err(_err) => {
-                    return Err(Error::FailedToFind);
-                }
+                Ok(v) => Ok(v),
+                Err(_err) => Err(Error::FailedToFind),
             },
 
             EnvSpecifier::Path(path) => match self.find_by_path(&path) {
-                Ok(record) => return Ok(option_to_vec(record)),
-                Err(_err) => {
-                    return Err(Error::FailedToFind);
-                }
+                Ok(v) => Ok(v),
+                Err(_) => Err(Error::FailedToFind),
             },
 
             EnvSpecifier::Uuid(uuid) => match self.find_by_uuid(uuid) {
-                Ok(record) => return Ok(option_to_vec(record)),
-                Err(_err) => return Err(Error::FailedToFind),
+                Ok(v) => Ok(v),
+                Err(_) => Err(Error::FailedToFind),
+            },
+        }
+    }
+
+    fn remove(&mut self, specifier: EnvSpecifier) -> Result<usize, Error> {
+        match specifier {
+            EnvSpecifier::Name(name) => match self.remove_by_name(name) {
+                Ok(s) => Ok(s),
+                Err(_err) => Err(Error::FailedToRemove),
+            },
+
+            EnvSpecifier::Path(path) => match self.remove_by_path(&path) {
+                Ok(s) => Ok(s),
+                Err(_err) => Err(Error::FailedToRemove),
+            },
+            EnvSpecifier::Uuid(uuid) => match self.remove_by_uuid(uuid) {
+                Ok(s) => Ok(s),
+                Err(_err) => Err(Error::FailedToRemove),
             },
         }
     }
@@ -93,7 +127,7 @@ pub trait EnvStore {
 
 pub trait Runtime {
     fn provision_and_start(&mut self, env_spec: &EnvSpec) -> ContainerInfo;
-    fn enter(&mut self, info: &ContainerInfo);
-    fn kill(&mut self, info: &ContainerInfo);
-    fn is_running(&mut self);
+    fn enter(&mut self, env_record: &EnvRecord);
+    fn kill(&mut self, env_record: &EnvRecord);
+    fn is_running(&mut self, env_record: &EnvRecord);
 }

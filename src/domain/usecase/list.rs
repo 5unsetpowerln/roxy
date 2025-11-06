@@ -25,7 +25,6 @@ impl<R: Runtime, S: EnvStore> ListHandler<R, S> {
         };
 
         // 表として出力する
-
         let env_records_for_list = env_records
             .iter()
             .map(EnvRecordForList::from_record)
