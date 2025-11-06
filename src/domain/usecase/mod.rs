@@ -15,7 +15,7 @@ use self::init::InitHandler;
 use self::kill::KillHandler;
 use self::list::ListHandler;
 
-use super::repo::{EnvRecord, EnvSpecifier, EnvStore};
+use super::repo::{EnvRecord, EnvSpecifier, EnvStore, SharedResources};
 
 pub enum Action {
     Init,
@@ -108,9 +108,9 @@ fn specify_env_to_operate<E: EnvStore>(
     return None;
 }
 
-pub fn handle(action: Action, current_path: &Path, database_path: &Path) {
+pub fn handle(action: Action, current_path: &Path, shared_resources: &SharedResources) {
     let docker = DockerForContainerRuntime::new();
-    let sqlite = match SqliteForContainerStore::new(database_path) {
+    let sqlite = match SqliteForContainerStore::new(&shared_resources.database_absolute_path()) {
         Ok(v) => v,
         Err(_err) => {
             error!("Failed to create sqlite service.");
@@ -121,7 +121,7 @@ pub fn handle(action: Action, current_path: &Path, database_path: &Path) {
     match action {
         Action::Init => {
             let mut init_handler = InitHandler::new(docker, sqlite);
-            init_handler.handle(current_path);
+            init_handler.handle(current_path, shared_resources);
         }
         Action::Enter(specifier) => {
             let mut enter_handler = EnterHandler::new(docker, sqlite);

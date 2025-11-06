@@ -5,9 +5,11 @@ mod util;
 
 use log::error;
 use std::env;
+use std::path::PathBuf;
 use std::process::exit;
 
-use self::util::{create_dir, fs_present};
+use self::domain::repo::SharedResources;
+use self::util::fs_present;
 
 fn main() {
     // ロガーの初期化
@@ -17,7 +19,7 @@ fn main() {
         .unwrap();
 
     let mut shared_dir_path = env::home_dir().unwrap();
-    shared_dir_path.extend([".local", "share"]);
+    shared_dir_path.extend([".local", "share", "pwnenv"]);
 
     // 共有ディレクトリが存在しているか確認する
     let shared_dir_presence = match fs_present(&shared_dir_path) {
@@ -46,5 +48,12 @@ fn main() {
         }
     };
 
-    cli::handle(&current_path, &shared_dir_path);
+    let shared_resources = SharedResources {
+        shared_dir_path,
+        dockerfile_template_relative_path: PathBuf::from_iter(["template.dockerfile"]),
+        compose_template_relative_path: PathBuf::from_iter(["template.compose.yml"]),
+        database_relative_path: PathBuf::from_iter(["store.db"]),
+    };
+
+    cli::handle(&current_path, &shared_resources);
 }

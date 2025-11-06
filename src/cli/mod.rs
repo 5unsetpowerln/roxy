@@ -4,7 +4,7 @@ mod kill;
 use clap::{Parser, Subcommand};
 use std::path::Path;
 
-use crate::domain::repo::EnvSpecifier;
+use crate::domain::repo::{EnvSpecifier, SharedResources};
 use crate::domain::usecase::{self, Action};
 
 #[derive(Debug, Parser)]
@@ -50,10 +50,10 @@ fn cli_subcommand_to_usecase_action(sub_command: SubCommand) -> Action {
     }
 }
 
-pub fn handle(current_path: &Path, database_path: &Path) {
+pub fn handle(current_path: &Path, shared_resources: &SharedResources) {
     let args = Args::parse();
 
     let action = cli_subcommand_to_usecase_action(args.sub_command);
 
-    usecase::handle(action, current_path, database_path);
+    usecase::handle(action, current_path, shared_resources);
 }

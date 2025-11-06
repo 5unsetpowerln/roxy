@@ -3,7 +3,7 @@ use std::path::Path;
 use log::error;
 use uuid::Uuid;
 
-use crate::domain::repo::{EnvRecord, EnvSpec, EnvStore, Runtime};
+use crate::domain::repo::{EnvRecord, EnvSpec, EnvStore, Runtime, SharedResources};
 use crate::util::get_entry_name;
 
 pub(crate) struct InitHandler<R: Runtime, S: EnvStore> {
@@ -16,7 +16,7 @@ impl<R: Runtime, S: EnvStore> InitHandler<R, S> {
         Self { runtime, env_store }
     }
 
-    pub fn handle(&mut self, project_path: &Path) {
+    pub fn handle(&mut self, project_path: &Path, shared_resources: &SharedResources) {
         // 指定されたディレクトリに紐づいた環境が存在するか確認する
         let env_record = match self.env_store.find_by_path(project_path) {
             Ok(o) => o,
@@ -47,7 +47,17 @@ impl<R: Runtime, S: EnvStore> InitHandler<R, S> {
         };
 
         // 環境を立ち上げる
-        let container_info = self.runtime.provision_and_start(&env_spec);
+        let container_info = match self
+            .runtime
+            .provision_and_start(shared_resources, &env_spec)
+        {
+            Ok(i) => i,
+            Err(err) => {
+                error!("Failed to start init environment: {err:?}");
+
+                return;
+            }
+        };
 
         // EnvRecordを構築する
         let env_record = EnvRecord {

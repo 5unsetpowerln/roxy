@@ -3,7 +3,28 @@ use std::path::{Path, PathBuf};
 use tabled::Tabled;
 use uuid::Uuid;
 
-use crate::util::option_to_vec;
+pub struct SharedResources {
+    pub shared_dir_path: PathBuf,
+    pub dockerfile_template_relative_path: PathBuf,
+    pub compose_template_relative_path: PathBuf,
+    pub database_relative_path: PathBuf,
+}
+
+impl SharedResources {
+    pub fn dockerfile_template_absolute_path(&self) -> PathBuf {
+        self.shared_dir_path
+            .join(&self.dockerfile_template_relative_path)
+    }
+
+    pub fn compose_template_absolute_path(&self) -> PathBuf {
+        self.shared_dir_path
+            .join(&self.compose_template_relative_path)
+    }
+
+    pub fn database_absolute_path(&self) -> PathBuf {
+        self.shared_dir_path.join(&self.database_relative_path)
+    }
+}
 
 #[derive(Debug)]
 pub enum Error {
@@ -11,6 +32,12 @@ pub enum Error {
     DatabaseConnectionError,
     DatabaseError,
     FailedToRemove,
+    FileIoError,
+    SerializeError,
+    DeserializeError,
+    InvalidComposeConfig,
+    CommandExecutionError,
+    Other,
 }
 
 #[derive(Debug, Clone)]
@@ -126,7 +153,11 @@ pub trait EnvStore {
 }
 
 pub trait Runtime {
-    fn provision_and_start(&mut self, env_spec: &EnvSpec) -> ContainerInfo;
+    fn provision_and_start(
+        &mut self,
+        shared_resources: &SharedResources,
+        env_spec: &EnvSpec,
+    ) -> Result<ContainerInfo, Error>;
     fn enter(&mut self, env_record: &EnvRecord);
     fn kill(&mut self, env_record: &EnvRecord);
     fn is_running(&mut self, env_record: &EnvRecord);

@@ -1,0 +1,21 @@
+services:
+    pwn:
+        build:
+            context: .
+            dockerfile: dockerfile
+        user: root
+        network_mode: host
+        tty: true
+        privileged: true
+        ulimits:
+            core:
+                soft: -1
+                hard: -1
+        cap_add:
+            - "SYS_PTRACE"
+        security_opt:
+            - "seccomp=unconfined"
+        ports:
+            - "127.0.0.1:3333:3333"
+        volumes:
+            - /path:/root/workspace:rw

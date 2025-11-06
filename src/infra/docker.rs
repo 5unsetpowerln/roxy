@@ -1,27 +1,213 @@
-use crate::domain::repo::{ContainerId, ContainerInfo, EnvSpec, Runtime};
+use indexmap::IndexMap;
+use log::debug;
+use serde::{Deserialize, Serialize};
+use serde_yaml::Value;
+use std::io::{Read, Write};
+use std::path::PathBuf;
+use std::process::{Command, Stdio};
+use std::str::FromStr;
+use std::{fs, io};
+
+use crate::domain::repo::{
+    ContainerId, ContainerInfo, EnvRecord, EnvSpec, Error, Runtime, SharedResources,
+};
+
+const DOCKERFILE_NAME: &str = "dockerfile";
+const COMPOSE_NAME: &str = "compose.yml";
+
+#[derive(Debug, Serialize, Deserialize)]
+struct Compose {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    version: Option<String>,
+
+    #[serde(default)]
+    services: IndexMap<String, Service>,
+
+    #[serde(flatten)]
+    other: IndexMap<String, Value>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct Service {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    volumes: Option<Vec<Value>>,
+
+    #[serde(flatten)]
+    other: IndexMap<String, Value>,
+}
 
 pub struct DockerForContainerRuntime {}
 
 impl DockerForContainerRuntime {
     pub fn new() -> Self {
-        todo!()
+        Self {}
     }
 }
 
 impl Runtime for DockerForContainerRuntime {
-    fn provision_and_start(&mut self, env_spec: &EnvSpec) -> ContainerInfo {
+    fn provision_and_start(
+        &mut self,
+        shared_resources: &SharedResources,
+        env_spec: &EnvSpec,
+    ) -> Result<ContainerInfo, Error> {
+        // /tmp/<uuid>に設定ディレクトリを作成する
+        let config_path = PathBuf::from_str(&format!("/tmp/pwnenv-{}/", env_spec.uuid)).unwrap();
+        if let Err(err) = fs::remove_dir_all(&config_path) {
+            if let io::ErrorKind::NotFound = err.kind() {
+            } else {
+                return Err(Error::FileIoError);
+            }
+        }
+        if fs::create_dir(&config_path).is_err() {
+            return Err(Error::FileIoError);
+        }
+
+        // テンプレートのdockerfileとcompose.ymlを設定ディレクトリにコピーする
+        // コピー先のdockerfileを作成する
+        if let Err(err) = fs::File::create_new(config_path.join(DOCKERFILE_NAME)) {
+            if let io::ErrorKind::AlreadyExists = err.kind() {
+            } else {
+                return Err(Error::FileIoError);
+            }
+        }
+        if let Err(_err) = fs::copy(
+            shared_resources.dockerfile_template_absolute_path(),
+            config_path.join(DOCKERFILE_NAME),
+        ) {
+            return Err(Error::FileIoError);
+        }
+
+        // コピー先のcompose.tmlを作成する
+        if let Err(err) = fs::File::create_new(config_path.join(COMPOSE_NAME)) {
+            if let io::ErrorKind::AlreadyExists = err.kind() {
+            } else {
+                return Err(Error::FileIoError);
+            }
+        }
+        if fs::copy(
+            shared_resources.compose_template_absolute_path(),
+            config_path.join(COMPOSE_NAME),
+        )
+        .is_err()
+        {
+            return Err(Error::FileIoError);
+        }
+
+        // compose.ymlの内容をシリアライズする
+        // compose.ymlを開く
+        let compose_file = match fs::File::open(shared_resources.compose_template_absolute_path()) {
+            Ok(f) => f,
+            Err(_) => return Err(Error::FileIoError),
+        };
+        let mut reader = io::BufReader::new(compose_file);
+        let mut compose_contents = String::new();
+        if reader.read_to_string(&mut compose_contents).is_err() {
+            return Err(Error::FileIoError);
+        }
+        // シリアライズ
+        let mut compose: Compose = match serde_yaml::from_str(&compose_contents) {
+            Ok(c) => c,
+            Err(_) => return Err(Error::SerializeError),
+        };
+
+        // compose.ymlのvolumesを編集する
+        if compose.services.len() != 1 {
+            // compose.ymlに一つもサービスが含まれていない、もしくは複数のサービスが含まれている場合はエラー
+            return Err(Error::InvalidComposeConfig);
+        }
+
+        let volume = format!("{}:/root/workspace:rw", env_spec.project_path.display());
+        let volumes = vec![Value::String(volume)];
+        compose.services[0].volumes.replace(volumes);
+
+        // yamlにデシリアライズする
+        let yaml = match serde_yaml::to_string(&compose) {
+            Ok(y) => y,
+            Err(_) => return Err(Error::DeserializeError),
+        };
+
+        // 変更をcompose.ymlに保存する
+        let file = match fs::File::create(config_path.join(COMPOSE_NAME)) {
+            Ok(f) => f,
+            Err(_) => return Err(Error::FileIoError),
+        };
+        let mut writer = io::BufWriter::new(file);
+        if writer.write_all(yaml.as_bytes()).is_err() {
+            return Err(Error::FileIoError);
+        }
+
+        // 保存したあとにflushしないとcompose.ymlがからのままdocker compose upが実行されてしまうのでflushする
+        if let Err(_err) = writer.flush() {
+            return Err(Error::FileIoError);
+        }
+
+        // docker compose up --build -dを実行する
+        let status = match Command::new("docker")
+            .args([
+                "compose",
+                "-f",
+                &config_path.join(COMPOSE_NAME).display().to_string(),
+                "up",
+                "--build",
+                "-d",
+            ])
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .status()
+        {
+            Ok(s) => s,
+            Err(_) => return Err(Error::CommandExecutionError),
+        };
+
+        if !status.success() {
+            return Err(Error::CommandExecutionError);
+        }
+
+        // 起動したコンテナのコンテナidを取得する
+        let output = match Command::new("docker")
+            .args([
+                "compose",
+                "-f",
+                &config_path.join(COMPOSE_NAME).display().to_string(),
+                "ps",
+                "-q",
+            ])
+            .output()
+        {
+            Ok(o) => o,
+            Err(_err) => return Err(Error::CommandExecutionError),
+        };
+        if !output.status.success() {
+            return Err(Error::CommandExecutionError);
+        }
+
+        // idの一覧を取得する
+        let container_ids = String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .map(|s| s.trim().to_string())
+            .collect::<Vec<_>>();
+
+        // 同じcompose.ymlに紐づいた環境は1つしか存在しないと仮定している
+        // したがって、先頭のidだけを取得する
+        if container_ids.is_empty() {
+            return Err(Error::Other);
+        }
+        let container_id = ContainerId::from_str(&container_ids[0]);
+
+        Ok(ContainerInfo { container_id })
+    }
+
+    fn enter(&mut self, record: &EnvRecord) {
         todo!()
     }
 
-    fn enter(&mut self, info: &ContainerInfo) {
+    fn kill(&mut self, record: &EnvRecord) {
         todo!()
     }
 
-    fn kill(&mut self, info: &ContainerInfo) {
-        todo!()
-    }
-
-    fn is_running(&mut self) {
+    fn is_running(&mut self, record: &EnvRecord) {
         todo!()
     }
 }

@@ -34,6 +34,10 @@ pub fn create_dir(path: &Path) -> Result<()> {
     Ok(())
 }
 
+// pub fn force_create_dir(path: &Path) -> Result<()> {
+//     if let Err(err) = fs::create_dir
+// }
+
 pub fn get_entry_name(path: &Path) -> String {
     path.file_name().unwrap().to_string_lossy().to_string()
 }
