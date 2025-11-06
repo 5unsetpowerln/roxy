@@ -13,4 +13,5 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde_yaml = "0.9.34"
 simple_logger = "5.1.0"
 tabled = "0.20.0"
+thiserror = "2.0.17"
 uuid = { version = "1.18.1", features = ["v4"] }

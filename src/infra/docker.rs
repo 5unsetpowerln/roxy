@@ -55,11 +55,17 @@ impl Runtime for DockerForContainerRuntime {
         if let Err(err) = fs::remove_dir_all(&config_path) {
             if let io::ErrorKind::NotFound = err.kind() {
             } else {
-                return Err(Error::FileIoError);
+                return Err(Error::Io {
+                    path: None,
+                    source: io::Error::from(io::ErrorKind::Other),
+                });
             }
         }
         if fs::create_dir(&config_path).is_err() {
-            return Err(Error::FileIoError);
+            return Err(Error::Io {
+                path: None,
+                source: io::Error::from(io::ErrorKind::Other),
+            });
         }
 
         // テンプレートのdockerfileとcompose.ymlを設定ディレクトリにコピーする
@@ -67,21 +73,30 @@ impl Runtime for DockerForContainerRuntime {
         if let Err(err) = fs::File::create_new(config_path.join(DOCKERFILE_NAME)) {
             if let io::ErrorKind::AlreadyExists = err.kind() {
             } else {
-                return Err(Error::FileIoError);
+                return Err(Error::Io {
+                    path: None,
+                    source: io::Error::from(io::ErrorKind::Other),
+                });
             }
         }
         if let Err(_err) = fs::copy(
             shared_resources.dockerfile_template_absolute_path(),
             config_path.join(DOCKERFILE_NAME),
         ) {
-            return Err(Error::FileIoError);
+            return Err(Error::Io {
+                path: None,
+                source: io::Error::from(io::ErrorKind::Other),
+            });
         }
 
         // コピー先のcompose.tmlを作成する
         if let Err(err) = fs::File::create_new(config_path.join(COMPOSE_NAME)) {
             if let io::ErrorKind::AlreadyExists = err.kind() {
             } else {
-                return Err(Error::FileIoError);
+                return Err(Error::Io {
+                    path: None,
+                    source: io::Error::from(io::ErrorKind::Other),
+                });
             }
         }
         if fs::copy(
@@ -90,30 +105,43 @@ impl Runtime for DockerForContainerRuntime {
         )
         .is_err()
         {
-            return Err(Error::FileIoError);
+            return Err(Error::Io {
+                path: None,
+                source: io::Error::from(io::ErrorKind::Other),
+            });
         }
 
         // compose.ymlの内容をシリアライズする
         // compose.ymlを開く
         let compose_file = match fs::File::open(shared_resources.compose_template_absolute_path()) {
             Ok(f) => f,
-            Err(_) => return Err(Error::FileIoError),
+            Err(_) => {
+                return Err(Error::Io {
+                    path: None,
+                    source: io::Error::from(io::ErrorKind::Other),
+                });
+            }
         };
         let mut reader = io::BufReader::new(compose_file);
         let mut compose_contents = String::new();
         if reader.read_to_string(&mut compose_contents).is_err() {
-            return Err(Error::FileIoError);
+            return Err(Error::Io {
+                path: None,
+                source: io::Error::from(io::ErrorKind::Other),
+            });
         }
         // シリアライズ
         let mut compose: Compose = match serde_yaml::from_str(&compose_contents) {
             Ok(c) => c,
-            Err(_) => return Err(Error::SerializeError),
+            Err(err) => return Err(Error::YamlSer(err)),
         };
 
         // compose.ymlのvolumesを編集する
         if compose.services.len() != 1 {
             // compose.ymlに一つもサービスが含まれていない、もしくは複数のサービスが含まれている場合はエラー
-            return Err(Error::InvalidComposeConfig);
+            return Err(Error::InvalidComposeConfig {
+                reason: "services count must be exactly one".into(),
+            });
         }
 
         let volume = format!("{}:/root/workspace:rw", env_spec.project_path.display());
@@ -123,22 +151,33 @@ impl Runtime for DockerForContainerRuntime {
         // yamlにデシリアライズする
         let yaml = match serde_yaml::to_string(&compose) {
             Ok(y) => y,
-            Err(_) => return Err(Error::DeserializeError),
+            Err(err) => return Err(Error::YamlDe(err)),
         };
 
         // 変更をcompose.ymlに保存する
         let file = match fs::File::create(config_path.join(COMPOSE_NAME)) {
             Ok(f) => f,
-            Err(_) => return Err(Error::FileIoError),
+            Err(_) => {
+                return Err(Error::Io {
+                    path: None,
+                    source: io::Error::from(io::ErrorKind::Other),
+                });
+            }
         };
         let mut writer = io::BufWriter::new(file);
         if writer.write_all(yaml.as_bytes()).is_err() {
-            return Err(Error::FileIoError);
+            return Err(Error::Io {
+                path: None,
+                source: io::Error::from(io::ErrorKind::Other),
+            });
         }
 
         // 保存したあとにflushしないとcompose.ymlがからのままdocker compose upが実行されてしまうのでflushする
         if let Err(_err) = writer.flush() {
-            return Err(Error::FileIoError);
+            return Err(Error::Io {
+                path: None,
+                source: io::Error::from(io::ErrorKind::Other),
+            });
         }
 
         // docker compose up --build -dを実行する
@@ -157,11 +196,21 @@ impl Runtime for DockerForContainerRuntime {
             .status()
         {
             Ok(s) => s,
-            Err(_) => return Err(Error::CommandExecutionError),
+            Err(err) => {
+                return Err(Error::Command {
+                    cmd: "docker compose".into(),
+                    status: None,
+                    err: err.to_string(),
+                });
+            }
         };
 
         if !status.success() {
-            return Err(Error::CommandExecutionError);
+            return Err(Error::Command {
+                cmd: "docker compose".into(),
+                status: None,
+                err: String::new(),
+            });
         }
 
         // 起動したコンテナのコンテナidを取得する
@@ -176,10 +225,20 @@ impl Runtime for DockerForContainerRuntime {
             .output()
         {
             Ok(o) => o,
-            Err(_err) => return Err(Error::CommandExecutionError),
+            Err(err) => {
+                return Err(Error::Command {
+                    cmd: "docker compose".into(),
+                    status: None,
+                    err: err.to_string(),
+                });
+            }
         };
         if !output.status.success() {
-            return Err(Error::CommandExecutionError);
+            return Err(Error::Command {
+                cmd: "docker compose".into(),
+                status: None,
+                err: String::new(),
+            });
         }
 
         // idの一覧を取得する
@@ -192,7 +251,9 @@ impl Runtime for DockerForContainerRuntime {
         // 同じcompose.ymlに紐づいた環境は1つしか存在しないと仮定している
         // したがって、先頭のidだけを取得する
         if container_ids.is_empty() {
-            return Err(Error::Other);
+            return Err(Error::NotFound {
+                what: "container id from docker compose ps",
+            });
         }
         let container_id = ContainerId::from_str(&container_ids[0]);
 

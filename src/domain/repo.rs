@@ -26,18 +26,67 @@ impl SharedResources {
     }
 }
 
-#[derive(Debug)]
+use thiserror::Error;
+
+#[derive(Debug, Error)]
 pub enum Error {
-    FailedToFind,
-    DatabaseConnectionError,
-    DatabaseError,
-    FailedToRemove,
-    FileIoError,
-    SerializeError,
-    DeserializeError,
-    InvalidComposeConfig,
-    CommandExecutionError,
-    Other,
+    #[error("not found: {what}")]
+    NotFound { what: &'static str },
+
+    #[error("database connection failed: {path:?}: {source}")]
+    DbConn {
+        path: std::path::PathBuf,
+        #[source]
+        source: rusqlite::Error,
+    },
+
+    #[error("database error: {0}")]
+    Db(#[from] rusqlite::Error),
+
+    #[error("I/O error {path:?}: {source}")]
+    Io {
+        path: Option<std::path::PathBuf>,
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error("YAML serialize error: {0}")]
+    YamlSer(#[source] serde_yaml::Error),
+
+    #[error("YAML deserialize error: {0}")]
+    YamlDe(#[source] serde_yaml::Error),
+
+    #[error("invalid compose configuration: {reason}")]
+    InvalidComposeConfig { reason: String },
+
+    #[error("failed to run command: {cmd} (status: {status:?}){err}")]
+    Command {
+        cmd: String,
+        status: Option<i32>,
+        err: String,
+    },
+
+    #[error("remove failed: {what}")]
+    RemoveFailed { what: String },
+
+    #[error("template not found: {path:?}")]
+    TemplateNotFound { path: std::path::PathBuf },
+
+    #[error("invalid path: {path:?} ({msg})")]
+    InvalidPath {
+        path: std::path::PathBuf,
+        msg: String,
+    },
+
+    #[error("environment conflict: name={name}, path={path:?}, existing={existing:?}")]
+    EnvConflict {
+        name: String,
+        path: std::path::PathBuf,
+        existing: Option<uuid::Uuid>,
+    },
+
+    #[error("uuid error: {0}")]
+    Uuid(uuid::Error),
 }
 
 #[derive(Debug, Clone)]
@@ -116,38 +165,17 @@ pub trait EnvStore {
 
     fn find(&mut self, specifier: EnvSpecifier) -> Result<Vec<EnvRecord>, Error> {
         match specifier {
-            EnvSpecifier::Name(name) => match self.find_by_name(name) {
-                Ok(v) => Ok(v),
-                Err(_err) => Err(Error::FailedToFind),
-            },
-
-            EnvSpecifier::Path(path) => match self.find_by_path(&path) {
-                Ok(v) => Ok(v),
-                Err(_) => Err(Error::FailedToFind),
-            },
-
-            EnvSpecifier::Uuid(uuid) => match self.find_by_uuid(uuid) {
-                Ok(v) => Ok(v),
-                Err(_) => Err(Error::FailedToFind),
-            },
+            EnvSpecifier::Name(name) => self.find_by_name(name),
+            EnvSpecifier::Path(path) => self.find_by_path(&path),
+            EnvSpecifier::Uuid(uuid) => self.find_by_uuid(uuid),
         }
     }
 
     fn remove(&mut self, specifier: EnvSpecifier) -> Result<usize, Error> {
         match specifier {
-            EnvSpecifier::Name(name) => match self.remove_by_name(name) {
-                Ok(s) => Ok(s),
-                Err(_err) => Err(Error::FailedToRemove),
-            },
-
-            EnvSpecifier::Path(path) => match self.remove_by_path(&path) {
-                Ok(s) => Ok(s),
-                Err(_err) => Err(Error::FailedToRemove),
-            },
-            EnvSpecifier::Uuid(uuid) => match self.remove_by_uuid(uuid) {
-                Ok(s) => Ok(s),
-                Err(_err) => Err(Error::FailedToRemove),
-            },
+            EnvSpecifier::Name(name) => self.remove_by_name(name),
+            EnvSpecifier::Path(path) => self.remove_by_path(&path),
+            EnvSpecifier::Uuid(uuid) => self.remove_by_uuid(uuid),
         }
     }
 }

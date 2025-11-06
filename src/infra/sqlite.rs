@@ -14,13 +14,13 @@ impl SqliteForContainerStore {
         // データベースに接続する (ファイルがなければ作成される)
         let connection = match Connection::open(database_path) {
             Ok(c) => c,
-            Err(_err) => {
-                return Err(Error::DatabaseConnectionError);
+            Err(err) => {
+                return Err(Error::Db(err));
             }
         };
 
         // テーブルが未作成の場合は作成する
-        if let Err(_err) = connection.execute(
+        if let Err(err) = connection.execute(
             "CREATE TABLE IF NOT EXISTS env_records (
                         uuid          TEXT PRIMARY KEY,
                         path  TEXT NOT NULL,
@@ -29,7 +29,7 @@ impl SqliteForContainerStore {
                      )",
             (),
         ) {
-            return Err(Error::DatabaseError);
+            return Err(Error::Db(err));
         }
 
         Ok(Self { connection })
@@ -42,7 +42,7 @@ impl SqliteForContainerStore {
         name_s: String,
         container_id_s: String,
     ) -> Result<crate::domain::repo::EnvRecord, Error> {
-        let uuid = uuid::Uuid::parse_str(&uuid_s).map_err(|_| Error::DatabaseError)?;
+        let uuid = uuid::Uuid::parse_str(&uuid_s).map_err(|err| Error::Uuid(err))?;
         let spec = crate::domain::repo::EnvSpec {
             uuid,
             project_path: std::path::PathBuf::from(path_s),
@@ -73,10 +73,10 @@ impl EnvStore for SqliteForContainerStore {
                 "INSERT INTO env_records (uuid, path, name, container_id)
                          VALUES (?1, ?2, ?3, ?4)",
             )
-            .map_err(|_| Error::DatabaseError)?;
+            .map_err(|err| Error::Db(err))?;
 
         stmt.execute(rusqlite::params![uuid, path, name, container_id])
-            .map_err(|_| Error::DatabaseError)?;
+            .map_err(|err| Error::Db(err))?;
 
         Ok(())
     }
@@ -89,7 +89,7 @@ impl EnvStore for SqliteForContainerStore {
         let mut stmt = self
             .connection
             .prepare("SELECT uuid, path, name, container_id FROM env_records WHERE path = ?1")
-            .map_err(|_| Error::DatabaseError)?;
+            .map_err(|err| Error::Db(err))?;
 
         let rows = stmt
             .query_map(rusqlite::params![path_s], |row| {
@@ -100,11 +100,11 @@ impl EnvStore for SqliteForContainerStore {
                     row.get::<_, String>(3)?,
                 ))
             })
-            .map_err(|_| Error::DatabaseError)?;
+            .map_err(|err| Error::Db(err))?;
 
         let mut out = Vec::new();
         for r in rows {
-            let (u, p, n, c) = r.map_err(|_| Error::DatabaseError)?;
+            let (u, p, n, c) = r.map_err(|err| Error::Db(err))?;
             out.push(Self::record_from_parts(u, p, n, c)?);
         }
         Ok(out)
@@ -117,7 +117,7 @@ impl EnvStore for SqliteForContainerStore {
         let mut stmt = self
             .connection
             .prepare("SELECT uuid, path, name, container_id FROM env_records WHERE name = ?1")
-            .map_err(|_| Error::DatabaseError)?;
+            .map_err(|err| Error::Db(err))?;
 
         let rows = stmt
             .query_map(rusqlite::params![name], |row| {
@@ -128,11 +128,11 @@ impl EnvStore for SqliteForContainerStore {
                     row.get::<_, String>(3)?,
                 ))
             })
-            .map_err(|_| Error::DatabaseError)?;
+            .map_err(|err| Error::Db(err))?;
 
         let mut out = Vec::new();
         for r in rows {
-            let (u, p, n, c) = r.map_err(|_| Error::DatabaseError)?;
+            let (u, p, n, c) = r.map_err(|err| Error::Db(err))?;
             out.push(Self::record_from_parts(u, p, n, c)?);
         }
         Ok(out)
@@ -146,7 +146,7 @@ impl EnvStore for SqliteForContainerStore {
         let mut stmt = self
             .connection
             .prepare("SELECT uuid, path, name, container_id FROM env_records WHERE uuid = ?1")
-            .map_err(|_| Error::DatabaseError)?;
+            .map_err(|err| Error::Db(err))?;
 
         let rows = stmt
             .query_map(rusqlite::params![uuid_s], |row| {
@@ -157,11 +157,11 @@ impl EnvStore for SqliteForContainerStore {
                     row.get::<_, String>(3)?,
                 ))
             })
-            .map_err(|_| Error::DatabaseError)?;
+            .map_err(|err| Error::Db(err))?;
 
         let mut out = Vec::new();
         for r in rows {
-            let (u, p, n, c) = r.map_err(|_| Error::DatabaseError)?;
+            let (u, p, n, c) = r.map_err(|err| Error::Db(err))?;
             out.push(Self::record_from_parts(u, p, n, c)?);
         }
         Ok(out)
@@ -171,7 +171,7 @@ impl EnvStore for SqliteForContainerStore {
         let mut stmt = self
             .connection
             .prepare("SELECT uuid, path, name, container_id FROM env_records")
-            .map_err(|_| Error::DatabaseError)?;
+            .map_err(|err| Error::Db(err))?;
 
         let rows = stmt
             .query_map([], |row| {
@@ -182,11 +182,11 @@ impl EnvStore for SqliteForContainerStore {
                     row.get::<_, String>(3)?,
                 ))
             })
-            .map_err(|_| Error::DatabaseError)?;
+            .map_err(|err| Error::Db(err))?;
 
         let mut out = Vec::new();
         for r in rows {
-            let (u, p, n, c) = r.map_err(|_| Error::DatabaseError)?;
+            let (u, p, n, c) = r.map_err(|err| Error::Db(err))?;
             out.push(Self::record_from_parts(u, p, n, c)?);
         }
         Ok(out)
@@ -200,18 +200,18 @@ impl EnvStore for SqliteForContainerStore {
         let mut stmt = self
             .connection
             .prepare("DELETE FROM env_records WHERE path = ?1")
-            .map_err(|_| Error::DatabaseError)?;
+            .map_err(|err| Error::Db(err))?;
         stmt.execute(rusqlite::params![path_s])
-            .map_err(|_| Error::DatabaseError)
+            .map_err(|err| Error::Db(err))
     }
 
     fn remove_by_name(&mut self, name: String) -> Result<usize, crate::domain::repo::Error> {
         let mut stmt = self
             .connection
             .prepare("DELETE FROM env_records WHERE name = ?1")
-            .map_err(|_| Error::DatabaseError)?;
+            .map_err(|err| Error::Db(err))?;
         stmt.execute(rusqlite::params![name])
-            .map_err(|_| Error::DatabaseError)
+            .map_err(|err| Error::Db(err))
     }
 
     fn remove_by_uuid(&mut self, uuid: uuid::Uuid) -> Result<usize, crate::domain::repo::Error> {
@@ -219,8 +219,8 @@ impl EnvStore for SqliteForContainerStore {
         let mut stmt = self
             .connection
             .prepare("DELETE FROM env_records WHERE uuid = ?1")
-            .map_err(|_| Error::DatabaseError)?;
+            .map_err(|err| Error::Db(err))?;
         stmt.execute(rusqlite::params![uuid_s])
-            .map_err(|_| Error::DatabaseError)
+            .map_err(|err| Error::Db(err))
     }
 }
