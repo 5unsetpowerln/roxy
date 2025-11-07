@@ -56,17 +56,16 @@ impl Runtime for DockerForContainerRuntime {
             if let io::ErrorKind::NotFound = err.kind() {
             } else {
                 return Err(Error::Io {
-                    path: None,
+                    path: Some(config_path.clone()),
                     source: io::Error::from(io::ErrorKind::Other),
                 });
             }
         }
-        if fs::create_dir(&config_path).is_err() {
-            return Err(Error::Io {
-                path: None,
-                source: io::Error::from(io::ErrorKind::Other),
-            });
-        }
+
+        fs::create_dir(&config_path).map_err(|err| Error::Io {
+            path: Some(config_path.clone()),
+            source: err,
+        })?;
 
         // テンプレートのdockerfileとcompose.ymlを設定ディレクトリにコピーする
         // コピー先のdockerfileを作成する
@@ -74,67 +73,57 @@ impl Runtime for DockerForContainerRuntime {
             if let io::ErrorKind::AlreadyExists = err.kind() {
             } else {
                 return Err(Error::Io {
-                    path: None,
+                    path: Some(config_path.join(DOCKERFILE_NAME)),
                     source: io::Error::from(io::ErrorKind::Other),
                 });
             }
         }
-        if let Err(_err) = fs::copy(
+        fs::copy(
             shared_resources.dockerfile_template_absolute_path(),
             config_path.join(DOCKERFILE_NAME),
-        ) {
-            return Err(Error::Io {
-                path: None,
-                source: io::Error::from(io::ErrorKind::Other),
-            });
-        }
+        )
+        .map_err(|err| Error::Io {
+            path: None,
+            source: err,
+        })?;
 
         // コピー先のcompose.tmlを作成する
         if let Err(err) = fs::File::create_new(config_path.join(COMPOSE_NAME)) {
             if let io::ErrorKind::AlreadyExists = err.kind() {
             } else {
                 return Err(Error::Io {
-                    path: None,
+                    path: Some(config_path.join(COMPOSE_NAME)),
                     source: io::Error::from(io::ErrorKind::Other),
                 });
             }
         }
-        if fs::copy(
+        fs::copy(
             shared_resources.compose_template_absolute_path(),
             config_path.join(COMPOSE_NAME),
         )
-        .is_err()
-        {
-            return Err(Error::Io {
-                path: None,
-                source: io::Error::from(io::ErrorKind::Other),
-            });
-        }
+        .map_err(|err| Error::Io {
+            path: None,
+            source: err,
+        })?;
 
         // compose.ymlの内容をシリアライズする
         // compose.ymlを開く
-        let compose_file = match fs::File::open(shared_resources.compose_template_absolute_path()) {
-            Ok(f) => f,
-            Err(_) => {
-                return Err(Error::Io {
-                    path: None,
-                    source: io::Error::from(io::ErrorKind::Other),
-                });
-            }
-        };
+        let compose_file = fs::File::open(shared_resources.compose_template_absolute_path())
+            .map_err(|err| Error::Io {
+                path: Some(shared_resources.compose_template_absolute_path()),
+                source: err,
+            })?;
         let mut reader = io::BufReader::new(compose_file);
         let mut compose_contents = String::new();
-        if reader.read_to_string(&mut compose_contents).is_err() {
-            return Err(Error::Io {
-                path: None,
-                source: io::Error::from(io::ErrorKind::Other),
-            });
-        }
+        reader
+            .read_to_string(&mut compose_contents)
+            .map_err(|err| Error::Io {
+                path: Some(shared_resources.compose_template_absolute_path()),
+                source: err,
+            })?;
         // シリアライズ
-        let mut compose: Compose = match serde_yaml::from_str(&compose_contents) {
-            Ok(c) => c,
-            Err(err) => return Err(Error::YamlSer(err)),
-        };
+        let mut compose: Compose =
+            serde_yaml::from_str(&compose_contents).map_err(Error::YamlSer)?;
 
         // compose.ymlのvolumesを編集する
         if compose.services.len() != 1 {
@@ -149,39 +138,27 @@ impl Runtime for DockerForContainerRuntime {
         compose.services[0].volumes.replace(volumes);
 
         // yamlにデシリアライズする
-        let yaml = match serde_yaml::to_string(&compose) {
-            Ok(y) => y,
-            Err(err) => return Err(Error::YamlDe(err)),
-        };
+        let yaml = serde_yaml::to_string(&compose).map_err(Error::YamlDe)?;
 
         // 変更をcompose.ymlに保存する
-        let file = match fs::File::create(config_path.join(COMPOSE_NAME)) {
-            Ok(f) => f,
-            Err(_) => {
-                return Err(Error::Io {
-                    path: None,
-                    source: io::Error::from(io::ErrorKind::Other),
-                });
-            }
-        };
+        let file = fs::File::create(config_path.join(COMPOSE_NAME)).map_err(|err| Error::Io {
+            path: Some(config_path.join(COMPOSE_NAME)),
+            source: err,
+        })?;
         let mut writer = io::BufWriter::new(file);
-        if writer.write_all(yaml.as_bytes()).is_err() {
-            return Err(Error::Io {
-                path: None,
-                source: io::Error::from(io::ErrorKind::Other),
-            });
-        }
+        writer.write_all(yaml.as_bytes()).map_err(|err| Error::Io {
+            path: Some(config_path.join(COMPOSE_NAME)),
+            source: err,
+        })?;
 
         // 保存したあとにflushしないとcompose.ymlがからのままdocker compose upが実行されてしまうのでflushする
-        if let Err(_err) = writer.flush() {
-            return Err(Error::Io {
-                path: None,
-                source: io::Error::from(io::ErrorKind::Other),
-            });
-        }
+        writer.flush().map_err(|err| Error::Io {
+            path: Some(config_path.join(COMPOSE_NAME)),
+            source: err,
+        })?;
 
         // docker compose up --build -dを実行する
-        let status = match Command::new("docker")
+        let status = Command::new("docker")
             .args([
                 "compose",
                 "-f",
@@ -194,16 +171,11 @@ impl Runtime for DockerForContainerRuntime {
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
             .status()
-        {
-            Ok(s) => s,
-            Err(err) => {
-                return Err(Error::Command {
-                    cmd: "docker compose".into(),
-                    status: None,
-                    err: err.to_string(),
-                });
-            }
-        };
+            .map_err(|err| Error::Command {
+                cmd: "docker compose".into(),
+                status: None,
+                err: err.to_string(),
+            })?;
 
         if !status.success() {
             return Err(Error::Command {
@@ -214,7 +186,7 @@ impl Runtime for DockerForContainerRuntime {
         }
 
         // 起動したコンテナのコンテナidを取得する
-        let output = match Command::new("docker")
+        let output = Command::new("docker")
             .args([
                 "compose",
                 "-f",
@@ -223,16 +195,11 @@ impl Runtime for DockerForContainerRuntime {
                 "-q",
             ])
             .output()
-        {
-            Ok(o) => o,
-            Err(err) => {
-                return Err(Error::Command {
-                    cmd: "docker compose".into(),
-                    status: None,
-                    err: err.to_string(),
-                });
-            }
-        };
+            .map_err(|err| Error::Command {
+                cmd: "docker compose".into(),
+                status: None,
+                err: err.to_string(),
+            })?;
         if !output.status.success() {
             return Err(Error::Command {
                 cmd: "docker compose".into(),
