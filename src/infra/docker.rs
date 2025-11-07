@@ -269,7 +269,7 @@ impl Runtime for DockerForContainerRuntime {
         }
 
         // /tmp/<uuid>を削除する
-        let config_path = PathBuf::from_iter(["/tmp", &record.spec.uuid.to_string()]);
+        let config_path = PathBuf::from_str(&format!("/tmp/pwnenv-{}/", record.spec.uuid)).unwrap();
         fs::remove_dir_all(&config_path).map_err(|err| Error::Io {
             path: None,
             source: err,
