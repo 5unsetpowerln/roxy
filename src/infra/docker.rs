@@ -264,8 +264,51 @@ impl Runtime for DockerForContainerRuntime {
         todo!()
     }
 
-    fn kill(&mut self, record: &EnvRecord) {
-        todo!()
+    fn kill(&mut self, record: &EnvRecord) -> Result<(), Error> {
+        // docker killする
+        let status = Command::new("docker")
+            .args(["kill", &record.container_info.container_id.to_string()])
+            .status()
+            .map_err(|err| Error::Command {
+                cmd: "docker kill".into(),
+                status: None,
+                err: err.to_string(),
+            })?;
+
+        if !status.success() {
+            return Err(Error::Command {
+                cmd: "docker kill".into(),
+                status: None,
+                err: String::new(),
+            });
+        }
+
+        // docker rmする
+        let status = Command::new("docker")
+            .args(["rm", &record.container_info.container_id.to_string()])
+            .status()
+            .map_err(|err| Error::Command {
+                cmd: "docker rm".into(),
+                status: None,
+                err: err.to_string(),
+            })?;
+
+        if !status.success() {
+            return Err(Error::Command {
+                cmd: "docker rm".into(),
+                status: None,
+                err: String::new(),
+            });
+        }
+
+        // /tmp/<uuid>を削除する
+        let config_path = PathBuf::from_iter(["/tmp", &record.spec.uuid.to_string()]);
+        fs::remove_dir_all(&config_path).map_err(|err| Error::Io {
+            path: None,
+            source: err,
+        })?;
+
+        Ok(())
     }
 
     fn is_running(&mut self, record: &EnvRecord) {

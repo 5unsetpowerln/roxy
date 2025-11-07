@@ -38,13 +38,17 @@ impl<R: Runtime, S: EnvStore> KillHandler<R, S> {
                 return;
             }
 
-            info!("Killing to {}", env_record.spec.project_name);
+            info!("Killing {}", env_record.spec.project_name);
 
             // 環境を終了する
-            self.runtime.kill(&env_record);
+            if let Err(err) = self.runtime.kill(&env_record) {
+                error!("Failed to kill the environment: {err}");
+            }
 
             // 環境の情報を破棄する
-            self.env_store.remove_by_uuid(env_record.spec.uuid);
+            if let Err(err) = self.env_store.remove_by_uuid(env_record.spec.uuid) {
+                error!("Failed to remove the environment record: {err}");
+            }
         }
     }
 }

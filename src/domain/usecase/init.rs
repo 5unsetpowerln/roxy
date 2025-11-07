@@ -21,7 +21,7 @@ impl<R: Runtime, S: EnvStore> InitHandler<R, S> {
         let env_record = match self.env_store.find_by_path(project_path) {
             Ok(o) => o,
             Err(err) => {
-                error!("Failed to find the environment by path: {err:?}");
+                error!("Failed to find the environment by path: {err}");
                 return;
             }
         };
