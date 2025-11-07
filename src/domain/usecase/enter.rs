@@ -20,8 +20,10 @@ impl<R: Runtime, S: EnvStore> EnterHandler<R, S> {
         if let Some(env_record) =
             specify_env_to_operate(&mut self.env_store, current_path, env_specifier)
         {
-            info!("Entering to {}", env_record.spec.project_name);
-            self.runtime.enter(&env_record);
+            info!("entering to {}", env_record.spec.project_name);
+            if let Err(err) = self.runtime.enter(&env_record) {
+                error!("failed to enter the environment: {err}");
+            }
         }
     }
 }

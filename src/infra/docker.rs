@@ -3,6 +3,7 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 use std::io::{Read, Write};
+use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::str::FromStr;
@@ -227,8 +228,24 @@ impl Runtime for DockerForContainerRuntime {
         Ok(ContainerInfo { container_id })
     }
 
-    fn enter(&mut self, record: &EnvRecord) {
-        todo!()
+    fn enter(&mut self, record: &EnvRecord) -> Result<(), Error> {
+        let err = Command::new("docker")
+            .args([
+                "exec",
+                "-it",
+                &record.container_info.container_id.to_string(),
+                "/bin/fish",
+            ])
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .exec();
+
+        Err(Error::Command {
+            cmd: "docker exec".into(),
+            status: None,
+            err: err.to_string(),
+        })
     }
 
     fn kill(&mut self, record: &EnvRecord) -> Result<(), Error> {
@@ -276,9 +293,5 @@ impl Runtime for DockerForContainerRuntime {
         })?;
 
         Ok(())
-    }
-
-    fn is_running(&mut self, record: &EnvRecord) {
-        todo!()
     }
 }

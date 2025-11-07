@@ -186,7 +186,6 @@ pub trait Runtime {
         shared_resources: &SharedResources,
         env_spec: &EnvSpec,
     ) -> Result<ContainerInfo, Error>;
-    fn enter(&mut self, env_record: &EnvRecord);
+    fn enter(&mut self, env_record: &EnvRecord) -> Result<(), Error>;
     fn kill(&mut self, env_record: &EnvRecord) -> Result<(), Error>;
-    fn is_running(&mut self, env_record: &EnvRecord);
 }
