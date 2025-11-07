@@ -181,7 +181,7 @@ pub trait EnvStore {
 }
 
 pub trait Runtime {
-    fn provision_and_start(
+    fn init(
         &mut self,
         shared_resources: &SharedResources,
         env_spec: &EnvSpec,

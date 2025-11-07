@@ -47,10 +47,7 @@ impl<R: Runtime, S: EnvStore> InitHandler<R, S> {
         };
 
         // 環境を立ち上げる
-        let container_info = match self
-            .runtime
-            .provision_and_start(shared_resources, &env_spec)
-        {
+        let container_info = match self.runtime.init(shared_resources, &env_spec) {
             Ok(i) => i,
             Err(err) => {
                 error!("Failed to start init environment: {err:?}");
@@ -68,6 +65,11 @@ impl<R: Runtime, S: EnvStore> InitHandler<R, S> {
         // EnvRecordを保存する
         if self.env_store.insert(&env_record).is_err() {
             error!("Failed to store environment record.");
+        }
+
+        // 環境に入る
+        if let Err(err) = self.runtime.enter(&env_record) {
+            error!("Failed to enter to the environment.");
         }
     }
 }
