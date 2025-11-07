@@ -19,7 +19,7 @@ fn main() {
         .unwrap();
 
     let mut shared_dir_path = env::home_dir().unwrap();
-    shared_dir_path.extend([".local", "share", "pwnenv"]);
+    shared_dir_path.extend([".local", "share", "roxy"]);
 
     // 共有ディレクトリが存在しているか確認する
     let shared_dir_presence = match fs_present(&shared_dir_path) {

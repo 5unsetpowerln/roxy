@@ -15,6 +15,7 @@ use crate::domain::repo::{
 
 const DOCKERFILE_NAME: &str = "dockerfile";
 const COMPOSE_NAME: &str = "compose.yml";
+const CONFIG_DIR_PREFIX: &str = "/tmp/roxy-";
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Compose {
@@ -52,7 +53,8 @@ impl Runtime for DockerForContainerRuntime {
         env_spec: &EnvSpec,
     ) -> Result<ContainerInfo, Error> {
         // /tmp/<uuid>に設定ディレクトリを作成する
-        let config_path = PathBuf::from_str(&format!("/tmp/pwnenv-{}/", env_spec.uuid)).unwrap();
+        let config_path =
+            PathBuf::from_str(&format!("{}{}/", CONFIG_DIR_PREFIX, env_spec.uuid)).unwrap();
         if let Err(err) = fs::remove_dir_all(&config_path) {
             if let io::ErrorKind::NotFound = err.kind() {
             } else {
@@ -286,7 +288,8 @@ impl Runtime for DockerForContainerRuntime {
         }
 
         // /tmp/<uuid>を削除する
-        let config_path = PathBuf::from_str(&format!("/tmp/pwnenv-{}/", record.spec.uuid)).unwrap();
+        let config_path =
+            PathBuf::from_str(&format!("{}{}/", CONFIG_DIR_PREFIX, record.spec.uuid)).unwrap();
         fs::remove_dir_all(&config_path).map_err(|err| Error::Io {
             path: None,
             source: err,
